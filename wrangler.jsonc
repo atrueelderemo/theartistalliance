@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Must match the Worker name in the Cloudflare dashboard.
+  "name": "theartistalliance",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-10-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "TABLE", "class_name": "Table" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Table"] }],
+  "observability": { "enabled": true }
+}
