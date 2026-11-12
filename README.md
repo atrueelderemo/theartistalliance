@@ -2,7 +2,7 @@
 
 A live, shared battle map for D&D and other tabletop games. Start a table, send the link, and everyone sees token moves, dice rolls and turn order as they happen. No accounts needed.
 
-**Features:** drag-and-drop tokens (touch friendly), six ready-made maps (tavern, forest, dungeon, cave, crossroads, village — most can be reshuffled), upload your own map, grid alignment, HP / AC / conditions / notes per token, shared dice roller with advantage/disadvantage, initiative tracker with rounds, pings (long-press or double-click), invite links.
+**Features:** a whiteboard-style table where you can place several maps side by side (move, resize, stack, lock), six ready-made maps (tavern, forest, dungeon, cave, crossroads, village — most can be reshuffled), upload your own maps, character tokens made from your own images (transparent PNGs stand on the map as-is) or simple round tokens, HP / AC / conditions / notes per token, shared dice roller with advantage/disadvantage, initiative tracker with rounds, pings (long-press or double-click), invite links.
 
 ## How it runs
 

@@ -3,6 +3,7 @@
 // `sockets()` returns the open connections; each has send(str) and an `info` object {id,name,color}.
 
 const MAX_TOKENS = 400;
+const MAX_MAPS = 60;
 const MAX_ROLLS = 40;
 const MAX_MSG = 32 * 1024;
 
@@ -16,9 +17,12 @@ async function snapshot(store) {
   const toks = await store.list("tok:");
   const tokens = {};
   for (const [k, v] of toks) tokens[k.slice(4)] = v;
+  const maps = {};
+  for (const [k, v] of await store.list("map:")) maps[k.slice(4)] = v;
   return {
     game: (await store.get("game")) || {},
     tokens,
+    maps,
     rolls: (await store.get("rolls")) || [],
   };
 }
@@ -76,6 +80,26 @@ export async function handleMessage(store, sockets, ws, raw) {
       if (!me.joined || !okId(m.id)) return;
       await store.delete("tok:" + m.id);
       broadcast(sockets, { t: "tokdel", id: m.id }, ws);
+      return;
+    }
+    case "map": {
+      if (!me.joined || !okId(m.id) || !isObj(m.patch)) return;
+      const key = "map:" + m.id;
+      const cur = await store.get(key);
+      if (!cur) {
+        const n = (await store.list("map:")).size;
+        if (n >= MAX_MAPS) { ws.send(JSON.stringify({ t: "error", msg: "This table has too many maps. Remove some first." })); return; }
+      }
+      const data = { ...(cur || {}), ...m.patch };
+      if (JSON.stringify(data).length > 4000) return;
+      await store.put(key, data);
+      broadcast(sockets, { t: "map", id: m.id, data }, ws);
+      return;
+    }
+    case "mapdel": {
+      if (!me.joined || !okId(m.id)) return;
+      await store.delete("map:" + m.id);
+      broadcast(sockets, { t: "mapdel", id: m.id }, ws);
       return;
     }
     case "game": {

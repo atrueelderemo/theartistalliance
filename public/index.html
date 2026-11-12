@@ -23,13 +23,40 @@ button{font:inherit;color:inherit;cursor:pointer}
 
 #vp{position:fixed;inset:0;touch-action:none;overflow:hidden;
   background:radial-gradient(1200px 800px at 50% 40%,#1d1920 0%,#0c0a0d 70%)}
-#board{position:absolute;left:0;top:0;transform-origin:0 0;box-shadow:0 20px 80px rgba(0,0,0,.7)}
-#board.blank{background:
+#board,#maps{position:absolute;left:0;top:0;width:0;height:0;transform-origin:0 0}
+#vp{background:#16131a}
+#grid{position:absolute;inset:0;pointer-events:none}
+.mapitem{position:absolute;box-shadow:0 14px 50px rgba(0,0,0,.6);touch-action:none}
+.mapitem img{display:block;width:100%;height:100%;pointer-events:none;-webkit-user-drag:none;user-select:none}
+.mapitem .hdl{display:none;position:absolute;right:-14px;bottom:-14px;width:28px;height:28px;border-radius:50%;background:var(--gold);border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.6);cursor:nwse-resize}
+.mapitem .mlbl{display:none;position:absolute;left:0;top:0;transform:translateY(-100%);background:var(--gold);color:#1a1205;font-weight:700;white-space:nowrap;padding:.15em .6em;border-radius:.4em .4em 0 0}
+#vp.arrange .mapitem{outline:2px dashed rgba(227,174,85,.55);outline-offset:0;cursor:move}
+#vp.arrange .mapitem.msel{outline:3px solid var(--gold)}
+#vp.arrange .mapitem.msel .hdl,#vp.arrange .mapitem.msel .mlbl{display:block}
+#vp.arrange .mapitem.locked{cursor:default;outline-style:dotted}
+#vp.arrange .mapitem.locked .hdl{display:none}
+#vp.arrange #board{pointer-events:none}
+.tok.figure .face{inset:0;border:0;border-radius:0;background-color:transparent!important;background-size:contain;background-position:center bottom;
+  box-shadow:none;filter:drop-shadow(0 4px 5px rgba(0,0,0,.65));overflow:visible}
+.tok.figure.sel .face{outline:none;filter:drop-shadow(0 0 3px var(--gold2)) drop-shadow(0 0 3px var(--gold2)) drop-shadow(0 4px 5px rgba(0,0,0,.6))}
+.tok.figure.turn::before{inset:auto 0 -10% 0;height:28%;border-radius:50%}
+.tok.figure .hp{bottom:-8%}
+.tok.figure.dead .face{filter:grayscale(1) brightness(.55) drop-shadow(0 4px 5px rgba(0,0,0,.65))}
+#addMenu{position:fixed;z-index:30;display:none;flex-direction:column;gap:6px;padding:8px;border-radius:14px;border:1px solid var(--line);
+  background:rgba(24,21,26,.98);box-shadow:0 16px 40px rgba(0,0,0,.6);min-width:240px}
+#addMenu.open{display:flex}
+#addMenu button{display:flex;align-items:center;gap:10px;height:48px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);font-weight:600;text-align:left}
+#addMenu button small{display:block;font-weight:400;color:var(--mute);font-size:12px}
+.maprow{display:flex;align-items:center;gap:10px;padding:6px;border-radius:12px;background:#16131a;border:1px solid #2a252e;margin-bottom:6px;width:100%;text-align:left}
+.maprow.on{border-color:var(--gold);background:#2a2214}
+.maprow img{width:54px;height:40px;object-fit:cover;border-radius:6px;flex:none;background:#000}
+.maprow span{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.selcard{border:1px solid var(--gold);border-radius:14px;padding:12px;background:#1f1a14;margin-bottom:16px}
+.pic{width:64px;height:64px;border-radius:12px;background:#120f14 center/contain no-repeat;border:1px solid var(--line);flex:none}
+#board.blank-unused{background:
   radial-gradient(ellipse at 30% 20%,rgba(255,255,255,.18),transparent 60%),
   radial-gradient(ellipse at 80% 90%,rgba(90,60,20,.25),transparent 60%),
   #cdb88f}
-#mapimg{position:absolute;left:0;top:0;width:100%;height:100%;display:none;pointer-events:none;-webkit-user-drag:none}
-#grid{position:absolute;inset:0;pointer-events:none}
 #tokens,#fx{position:absolute;inset:0}
 #fx{pointer-events:none}
 
@@ -182,12 +209,17 @@ input[type=range]{width:100%;accent-color:var(--gold)}
 </head>
 <body>
 <div id="vp">
-  <div id="board" class="blank">
-    <img id="mapimg" alt="">
-    <div id="grid"></div>
+  <div id="maps"></div>
+  <div id="grid"></div>
+  <div id="board">
     <div id="tokens"></div>
     <div id="fx"></div>
   </div>
+</div>
+<div id="addMenu">
+  <button id="amChar">🧍<span>Character from an image<small>Upload a picture — it stands on the map as-is</small></span></button>
+  <button id="amBlank">●<span>Simple token<small>A colored circle with initials</small></span></button>
+  <input type="file" id="amFile" accept="image/*" style="display:none">
 </div>
 
 <div id="bar" class="ui">
@@ -217,13 +249,13 @@ input[type=range]{width:100%;accent-color:var(--gold)}
 (() => {
 'use strict';
 const $ = s => document.querySelector(s);
-const vp=$('#vp'), board=$('#board'), mapimg=$('#mapimg'), gridEl=$('#grid'), tokLayer=$('#tokens'), fx=$('#fx');
+const vp=$('#vp'), board=$('#board'), mapsLayer=$('#maps'), gridEl=$('#grid'), tokLayer=$('#tokens'), fx=$('#fx');
 const panel=$('#panel'), pbody=$('#pbody'), ptitle=$('#ptitle');
 
 const COLORS=['#c0392b','#e67e22','#d4ac0d','#27ae60','#16a085','#2980b9','#8e44ad','#d35490','#7f8c8d','#5d4037'];
 const KIND_COLOR={pc:'#2980b9',npc:'#27ae60',monster:'#c0392b',object:'#7f8c8d'};
 const CONDS=['Blinded','Charmed','Deafened','Frightened','Grappled','Incapacitated','Invisible','Paralyzed','Petrified','Poisoned','Prone','Restrained','Stunned','Unconscious','Concentrating','Blessed'];
-const DEF_GAME={preset:null,seed:1,map:null,mapW:0,mapH:0,cell:70,offX:0,offY:0,cols:30,rows:20,grid:true,gridAlpha:0.35,gridLight:false,turn:null,round:1};
+const DEF_GAME={preset:null,seed:1,map:null,mapW:0,mapH:0,cell:70,offX:0,offY:0,cols:30,rows:20,grid:true,gridAlpha:0.35,gridStyle:'auto',turn:null,round:1};
 
 const ls={get(k,d){try{const v=localStorage.getItem('bm_'+k);return v==null?d:JSON.parse(v)}catch(e){return d}},
           set(k,v){try{localStorage.setItem('bm_'+k,JSON.stringify(v))}catch(e){}}};
@@ -237,10 +269,12 @@ const el=(tag,props={},kids=[])=>{const e=document.createElement(tag);for(const 
 let canWrite=true, assets=true, myId=null;
 let game={...DEF_GAME};
 const tokens=new Map();
+const maps=new Map();
+let selMap=null;
 let rolls=[];
 let view={tx:0,ty:0,s:1}, fitted=false;
 let selected=null, mode=null;
-let localDrag=null;
+let localDrag=null, mapDrag=null;
 const remoteDrag=new Map(), dragFrom=new Map();
 let snap=ls.get('snap',true);
 let myColor=ls.get('color',null); if(!okColor(myColor)){myColor=COLORS[Math.floor(Math.random()*COLORS.length)];ls.set('color',myColor);}
@@ -294,6 +328,7 @@ function onMsg(m){
       myId=m.you; connected=true; retry=0;
       game={...DEF_GAME,...(m.game||{})}; sanitizeGame();
       tokens.clear(); for(const id in (m.tokens||{})) tokens.set(id,{...m.tokens[id]});
+      maps.clear(); for(const id in (m.maps||{})) maps.set(id,{...m.maps[id]});
       rolls=Array.isArray(m.rolls)?m.rolls:[];
       peers=Array.isArray(m.peers)?m.peers:[];
       remoteDrag.clear();
@@ -301,14 +336,17 @@ function onMsg(m){
       const pending=outbox.splice(0);
       for(const p of pending){ applyLocal(p); ws.send(JSON.stringify(p)); }
       if(selected&&!tokens.has(selected)) select(null);
+      if(selMap&&!maps.has(selMap)) selMap=null;
+      migrateLegacyMap();
       render(); refreshPanels(); renderPeople(); updateStatus();
       if(!everConnected){ everConnected=true; fitted=false; setTimeout(fit,30); }
       break;
     }
     case 'tok': if(typeof m.id==='string'&&m.data&&typeof m.data==='object'){ tokens.set(m.id,{...m.data}); remoteDrag.delete(m.id); render(); if(mode==='token'&&selected===m.id) fillToken(); if(mode==='turns') fillTurns(); } break;
     case 'tokdel': tokens.delete(m.id); remoteDrag.delete(m.id); if(selected===m.id) select(null); render(); if(mode==='turns') fillTurns(); break;
-    case 'game': { const hadMap=game.map+'|'+game.preset+'|'+game.seed; game={...DEF_GAME,...(m.game||{})}; sanitizeGame(); render(); if(mode==='map') fillMap(); if(mode==='turns') fillTurns();
-      if(hadMap!==game.map+'|'+game.preset+'|'+game.seed){ fitted=false; setTimeout(fit,60); } break; }
+    case 'game': { game={...DEF_GAME,...(m.game||{})}; sanitizeGame(); render(); if(mode==='map') fillMap(); if(mode==='turns') fillTurns(); break; }
+    case 'map': if(typeof m.id==='string'&&m.data&&typeof m.data==='object'){ if(mapDrag&&mapDrag.id===m.id) break; maps.set(m.id,{...m.data}); render(); if(mode==='map') fillMap(); } break;
+    case 'mapdel': maps.delete(m.id); if(selMap===m.id) selMap=null; render(); if(mode==='map') fillMap(); break;
     case 'roll': { const r=m.roll; if(!r||typeof r!=='object') break;
       if(myRolls>0&&r.name===myName){ myRolls--; r.mine=true; } else rollToast(r);
       rolls.unshift(r); rolls=rolls.slice(0,40); if(mode==='dice') renderLog(); break; }
@@ -325,6 +363,8 @@ function applyLocal(p){
   if(p.t==='tok'){ tokens.set(p.id,{...(tokens.get(p.id)||{}),...p.patch}); }
   else if(p.t==='tokdel'){ tokens.delete(p.id); }
   else if(p.t==='game'){ Object.assign(game,p.patch); sanitizeGame(); }
+  else if(p.t==='map'){ maps.set(p.id,{...(maps.get(p.id)||{}),...p.patch}); }
+  else if(p.t==='mapdel'){ maps.delete(p.id); }
 }
 function refreshPanels(){ if(mode==='map') fillMap(); else if(mode==='turns') fillTurns(); else if(mode==='dice') renderLog(); else if(mode==='token') fillToken(); }
 
@@ -335,11 +375,24 @@ function sanitizeGame(){
   if(game.map&&!okId(game.map)) game.map=null;
   if(game.preset&&!Object.prototype.hasOwnProperty.call(PRESETS,game.preset)) game.preset=null;
   game.seed=Math.abs(Math.round(num(game.seed,1)))||1;
+  if(!['auto','dark','light'].includes(game.gridStyle)) game.gridStyle=game.gridLight?'light':'auto';
 }
 
 function saveToken(id,patch){ const t=tokens.get(id); if(!t) return; Object.assign(t,patch); render(); send({t:'tok',id,patch}); }
 function createToken(data){ const id='t'+rid(); tokens.set(id,{...data}); render(); send({t:'tok',id,patch:data}); return id; }
 function deleteToken(id){ tokens.delete(id); if(selected===id) select(null); render(); send({t:'tokdel',id}); }
+function saveMap(id,patch){ const m=maps.get(id); if(!m) return; Object.assign(m,patch); render(); send({t:'map',id,patch}); }
+function createMap(data,id){ id=id||'m'+rid(); maps.set(id,{...data}); render(); send({t:'map',id,patch:data}); return id; }
+function deleteMap(id){ maps.delete(id); if(selMap===id) selMap=null; render(); send({t:'mapdel',id}); }
+function okMap(m){ return m&&Number.isFinite(+m.x)&&Number.isFinite(+m.y)&&+m.w>0&&+m.h>0; }
+// Tables made before the whiteboard had one map stored on the game itself: turn it into a map piece.
+function migrateLegacyMap(){
+  if(maps.size||!(game.map||game.preset)) return;
+  const x=-num(game.offX)/game.cell, y=-num(game.offY)/game.cell;
+  if(game.map){ const w=(num(game.mapW)||1400)/game.cell, h=(num(game.mapH)||1000)/game.cell; createMap({kind:'image',img:game.map,name:'Uploaded map',x,y,w,h,z:1},'legacy'); }
+  else { const pm=presetMap(game.preset,game.seed); if(pm) createMap({kind:'preset',preset:game.preset,seed:game.seed,name:PRESETS[game.preset].label,x:0,y:0,w:pm.cols*U/game.cell,h:pm.rows*U/game.cell,z:1},'legacy'); }
+  saveGame({map:null,preset:null,offX:0,offY:0});
+}
 function saveGame(patch){ Object.assign(game,patch); sanitizeGame(); render(); const p={}; for(const k in patch) p[k]=game[k]; send({t:'game',patch:p}); }
 
 let dragOut=null, dragRaf=0;
@@ -644,17 +697,34 @@ function presetThumb(key){
 }
 
 /* ---------------- view & render ---------------- */
-function boardSize(){
-  if(game.map){ const w=num(game.mapW)||mapimg.naturalWidth||1400, h=num(game.mapH)||mapimg.naturalHeight||1000; return [w,h]; }
-  if(game.preset){ const pm=presetMap(game.preset,game.seed); if(pm) return [pm.cols*U,pm.rows*U]; }
-  return [game.offX+game.cols*game.cell, game.offY+game.rows*game.cell];
+function contentBounds(){
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity; const c=game.cell;
+  for(const m of maps.values()){ if(!okMap(m)) continue; x0=Math.min(x0,+m.x); y0=Math.min(y0,+m.y); x1=Math.max(x1,+m.x+ +m.w); y1=Math.max(y1,+m.y+ +m.h); }
+  for(const t of tokens.values()){ const z=num(t.size,1); x0=Math.min(x0,num(t.x)); y0=Math.min(y0,num(t.y)); x1=Math.max(x1,num(t.x)+z); y1=Math.max(y1,num(t.y)+z); }
+  if(x0===Infinity){ x0=0;y0=0;x1=24;y1=16; }
+  return [x0*c,y0*c,(x1-x0)*c,(y1-y0)*c];
 }
-function applyView(){ board.style.transform=`translate(${view.tx}px,${view.ty}px) scale(${view.s})`; }
+function applyView(){
+  const t=`translate(${view.tx}px,${view.ty}px) scale(${view.s})`; board.style.transform=t; mapsLayer.style.transform=t;
+  if(!game.grid){ gridEl.style.display='none'; return; }
+  gridEl.style.display='block';
+  const c=game.cell*view.s, a=game.gridAlpha, lw=c<18?1:Math.max(1,Math.min(2,c/45));
+  if(c<6){ gridEl.style.display='none'; return; }
+  const dark=`rgba(0,0,0,${a})`, light=`rgba(255,255,255,${(a*0.75).toFixed(2)})`;
+  let imgs;
+  if(game.gridStyle==='dark') imgs=[`linear-gradient(to right,${dark} ${lw}px,transparent ${lw}px)`,`linear-gradient(to bottom,${dark} ${lw}px,transparent ${lw}px)`];
+  else if(game.gridStyle==='light') imgs=[`linear-gradient(to right,${light} ${lw}px,transparent ${lw}px)`,`linear-gradient(to bottom,${light} ${lw}px,transparent ${lw}px)`];
+  else imgs=[`linear-gradient(to right,${dark} ${lw}px,${light} ${lw}px,${light} ${lw*2}px,transparent ${lw*2}px)`,`linear-gradient(to bottom,${dark} ${lw}px,${light} ${lw}px,${light} ${lw*2}px,transparent ${lw*2}px)`];
+  gridEl.style.backgroundImage=imgs.join(',');
+  gridEl.style.backgroundSize=`${c}px ${c}px`;
+  const ox=game.offX*view.s+view.tx, oy=game.offY*view.s+view.ty;
+  gridEl.style.backgroundPosition=`${ox-lw/2}px ${oy-lw/2}px`;
+}
 function fit(){
-  const [W,H]=boardSize(); const r=vp.getBoundingClientRect();
-  const top=70, pad=20;
-  const s=clamp(Math.min((r.width-pad*2)/W,(r.height-top-pad)/H),0.05,2);
-  view.s=s; view.tx=(r.width-W*s)/2; view.ty=top+(r.height-top-pad-H*s)/2; applyView(); fitted=true;
+  const [X,Y,W,H]=contentBounds(); const r=vp.getBoundingClientRect(); const side=(mode&&innerWidth>720)?362:0;
+  const top=70, pad=24, bottom=r.width<1060?64:pad;
+  const s=clamp(Math.min((r.width-side-pad*2)/W,(r.height-top-bottom)/H),0.05,2);
+  view.s=s; view.tx=(r.width-side-W*s)/2-X*s; view.ty=top+(r.height-top-bottom-H*s)/2-Y*s; applyView(); fitted=true;
 }
 function zoomAt(px,py,ns){
   ns=clamp(ns,0.05,6); const bx=(px-view.tx)/view.s, by=(py-view.ty)/view.s;
@@ -664,7 +734,9 @@ function toBoard(cx,cy){ const r=vp.getBoundingClientRect(); return {x:(cx-r.lef
 function centerOn(bx,by){ const r=vp.getBoundingClientRect(); view.tx=r.width/2-bx*view.s; view.ty=r.height/2-by*view.s; applyView(); }
 
 let raf=0; function render(){ if(!raf) raf=requestAnimationFrame(doRender); }
-const els=new Map();
+const els=new Map(), mapEls=new Map();
+function mapSrc(m){ if(m.kind==='image'&&okId(m.img)) return imgUrl(m.img); if(m.kind==='preset'){ const pm=presetMap(m.preset,Math.abs(Math.round(num(m.seed,1)))||1); return pm?pm.url:''; } return ''; }
+function mapGeom(id,m){ if(mapDrag&&mapDrag.id===id) return mapDrag.cur; return {x:+m.x,y:+m.y,w:+m.w,h:+m.h}; }
 function curPos(id,t){
   if(localDrag&&localDrag.id===id) return {x:localDrag.x,y:localDrag.y};
   const r=remoteDrag.get(id);
@@ -674,18 +746,22 @@ function curPos(id,t){
 function initials(n){ n=String(n||'').trim(); if(!n) return '?'; const p=n.split(/\s+/); return (p.length>1?p[0][0]+p[1][0]:n.slice(0,2)).toUpperCase(); }
 function doRender(){
   raf=0;
-  const [W,H]=boardSize(); board.style.width=W+'px'; board.style.height=H+'px';
-  const pm=!game.map&&game.preset?presetMap(game.preset,game.seed):null;
-  board.classList.toggle('blank',!game.map&&!pm);
-  const src=game.map?imgUrl(game.map):pm?pm.url:'';
-  if(mapimg.dataset.src!==src){ mapimg.dataset.src=src; if(src){mapimg.src=src;mapimg.style.display='block';} else {mapimg.removeAttribute('src');mapimg.style.display='none';} }
-  gridEl.style.display=game.grid?'block':'none';
-  const c=game.cell, a=game.gridAlpha, col=game.gridLight?`rgba(255,255,255,${a})`:`rgba(0,0,0,${a})`;
-  const lw=Math.max(1.5,c/35);
-  gridEl.style.backgroundImage=`linear-gradient(to right,${col} ${lw}px,transparent ${lw}px),linear-gradient(to bottom,${col} ${lw}px,transparent ${lw}px)`;
-  gridEl.style.backgroundSize=`${c}px ${c}px`;
-  gridEl.style.backgroundPosition=`${game.offX}px ${game.offY}px`;
+  const c=game.cell;
   applyView();
+  vp.classList.toggle('arrange',mode==='map');
+  const order=[...maps.entries()].filter(([,m])=>okMap(m)).sort((a,b)=>num(a[1].z)-num(b[1].z));
+  order.forEach(([id,m],i)=>{
+    let e=mapEls.get(id);
+    if(!e){ e=el('div',{class:'mapitem','data-mid':id},[el('img',{alt:'',draggable:'false'}),el('div',{class:'hdl'}),el('div',{class:'mlbl'})]); mapEls.set(id,e); }
+    if(e.parentNode!==mapsLayer||mapsLayer.children[i]!==e) mapsLayer.insertBefore(e,mapsLayer.children[i]||null);
+    const g=mapGeom(id,m);
+    e.style.left=g.x*c+'px'; e.style.top=g.y*c+'px'; e.style.width=g.w*c+'px'; e.style.height=g.h*c+'px';
+    const src=mapSrc(m); const im=e.firstChild; if(im.dataset.src!==src){ im.dataset.src=src; if(src) im.src=src; else im.removeAttribute('src'); }
+    e.classList.toggle('msel',selMap===id); e.classList.toggle('locked',!!m.locked);
+    const lb=e.children[2]; lb.textContent=(m.locked?'🔒 ':'')+String(m.name||'Map').slice(0,40); lb.style.fontSize=Math.max(12,14/view.s)+'px';
+    const h=e.children[1]; const hs=Math.max(28,28/view.s); h.style.width=h.style.height=hs+'px'; h.style.right=h.style.bottom=(-hs/2)+'px';
+  });
+  for(const [id,e] of mapEls) if(!maps.has(id)||!okMap(maps.get(id))){ e.remove(); mapEls.delete(id); }
 
   for(const [id,t] of tokens){
     let e=els.get(id);
@@ -699,6 +775,7 @@ function doRender(){
     const bg=img?`url("${imgUrl(img)}")`:'';
     if(face.dataset.bg!==bg){ face.dataset.bg=bg; face.style.backgroundImage=bg; }
     face.textContent=img?'':initials(t.name);
+    if(t.shape==='figure'&&img&&face.style.backgroundColor!=='transparent') face.style.backgroundColor='transparent'; else if(!(t.shape==='figure'&&img)) face.style.backgroundColor='';
     face.style.fontSize=(sz*0.34)+'px';
     lbl.textContent=t.name||''; lbl.style.fontSize=Math.max(9,c*0.19)+'px'; lbl.style.display=(t.name&&t.kind!=='object'||selected===id)&&t.name?'block':'none';
     const max=num(t.maxHp), cur=num(t.hp);
@@ -712,14 +789,14 @@ function doRender(){
     e.classList.toggle('turn',game.turn===id);
     e.classList.toggle('dead',max>0&&cur<=0&&t.kind!=='object');
     e.classList.toggle('square',t.shape==='square');
+    e.classList.toggle('figure',t.shape==='figure'&&!!img);
     e.classList.toggle('object',t.kind==='object');
     e.classList.toggle('img',!!img);
     e.style.zIndex=t.kind==='object'?1:(selected===id?6:3);
   }
   for(const [id,e] of els) if(!tokens.has(id)){ e.remove(); els.delete(id); }
-  $('#empty').style.display=(tokens.size===0&&!game.map&&!game.preset&&mode==null&&!emptyDismissed)?'block':'none';
+  $('#empty').style.display=(tokens.size===0&&maps.size===0&&mode==null&&!emptyDismissed&&everConnected)?'block':'none';
 }
-mapimg.addEventListener('load',()=>{ if(!num(game.mapW)) render(); });
 
 /* ---------------- pointer input ---------------- */
 const ptrs=new Map(); let gesture=null, lpTimer=null;
@@ -729,6 +806,14 @@ vp.addEventListener('pointerdown',e=>{
   try{vp.setPointerCapture(e.pointerId)}catch(_){}
   ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
   const tokEl=e.target.closest&&e.target.closest('.tok');
+  const mapEl=mode==='map'&&e.target.closest&&e.target.closest('.mapitem');
+  if(ptrs.size===1&&mapEl){
+    const id=mapEl.dataset.mid, m=maps.get(id);
+    if(m){
+      if(selMap!==id){ selMap=id; fillMap(); render(); }
+      if(!m.locked){ const o={x:+m.x,y:+m.y,w:+m.w,h:+m.h}; mapDrag={id,pid:e.pointerId,type:e.target.classList.contains('hdl')?'resize':'move',sx:e.clientX,sy:e.clientY,o,cur:{...o},moved:false}; gesture=null; return; }
+    }
+  }
   if(ptrs.size===1){
     if(tokEl&&canWrite!==false){
       const id=tokEl.dataset.id, t=tokens.get(id);
@@ -748,6 +833,16 @@ vp.addEventListener('pointerdown',e=>{
 vp.addEventListener('pointermove',e=>{
   if(!ptrs.has(e.pointerId)) return;
   ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(mapDrag&&mapDrag.pid===e.pointerId){
+    const dx=e.clientX-mapDrag.sx, dy=e.clientY-mapDrag.sy, k=view.s*game.cell, o=mapDrag.o;
+    if(!mapDrag.moved&&Math.hypot(dx,dy)>5) mapDrag.moved=true;
+    if(mapDrag.moved){
+      if(mapDrag.type==='move') mapDrag.cur={...o,x:o.x+dx/k,y:o.y+dy/k};
+      else { const w=Math.max(1,o.w+Math.max(dx,dy*o.w/o.h)/k); mapDrag.cur={...o,w,h:w*o.h/o.w}; }
+      render();
+    }
+    return;
+  }
   if(localDrag&&localDrag.pid===e.pointerId){
     const dx=e.clientX-localDrag.sx, dy=e.clientY-localDrag.sy;
     if(!localDrag.moved&&Math.hypot(dx,dy)>6) localDrag.moved=true;
@@ -775,9 +870,10 @@ function pointerEnd(e){
   if(!ptrs.has(e.pointerId)) return;
   ptrs.delete(e.pointerId); clearTimeout(lpTimer);
   if(localDrag&&localDrag.pid===e.pointerId){ finishDrag(e.type==='pointercancel'); return; }
+  if(mapDrag&&mapDrag.pid===e.pointerId){ finishMapDrag(e.type==='pointercancel'); return; }
   if(!gesture) return;
   if(gesture.type==='pan'&&gesture.pid===e.pointerId){
-    if(!gesture.moved&&e.type==='pointerup'&&!(e.target.closest&&e.target.closest('.tok'))) select(null);
+    if(!gesture.moved&&e.type==='pointerup'&&!(e.target.closest&&e.target.closest('.tok'))){ if(mode==='map'){ if(selMap&&!(e.target.closest&&e.target.closest('.mapitem'))){ selMap=null; fillMap(); render(); } } else select(null); }
     gesture=null;
   } else if(gesture.type==='pinch'){
     if(ptrs.size===1){ const [pid,p]=[...ptrs.entries()][0]; gesture={type:'pan',pid,sx:p.x,sy:p.y,tx:view.tx,ty:view.ty,moved:true}; }
@@ -786,6 +882,14 @@ function pointerEnd(e){
 }
 vp.addEventListener('pointerup',pointerEnd);
 vp.addEventListener('pointercancel',pointerEnd);
+function finishMapDrag(cancel){
+  const d=mapDrag; mapDrag=null;
+  if(!d.moved||cancel||!maps.has(d.id)){ render(); return; }
+  let {x,y,w,h}=d.cur; const m=maps.get(d.id), r3=v=>Math.round(v*1000)/1000;
+  if(d.type==='move'){ if(snap){ x=Math.round(x); y=Math.round(y); } saveMap(d.id,{x:r3(x),y:r3(y)}); }
+  else { w=m.kind==='preset'&&snap?Math.max(1,Math.round(w)):Math.max(1,Math.round(w*10)/10); h=w*d.o.h/d.o.w; saveMap(d.id,{w:r3(w),h:r3(h)}); }
+  fillMap();
+}
 function finishDrag(cancel){
   const d=localDrag; localDrag=null;
   sendDragEnd();
@@ -805,7 +909,7 @@ vp.addEventListener('dblclick',e=>{ if(e.target.closest&&e.target.closest('.tok'
 document.addEventListener('gesturestart',e=>e.preventDefault());
 document.addEventListener('keydown',e=>{
   if(/INPUT|TEXTAREA|SELECT/.test(document.activeElement&&document.activeElement.tagName)) return;
-  if(e.key==='Escape') select(null);
+  if(e.key==='Escape'){ if(mode==='map'&&selMap){ selMap=null; fillMap(); render(); } else select(null); }
   if((e.key==='Delete'||e.key==='Backspace')&&selected&&canWrite!==false) deleteToken(selected);
 });
 window.addEventListener('resize',()=>{ if(!fitted) fit(); });
@@ -815,7 +919,7 @@ function openPanel(m,title){
   mode=m; render(); ptitle.textContent=title; panel.classList.add('open'); pbody.textContent=''; pbody.scrollTop=0;
   for(const [b,k] of [['#bMap','map'],['#bDice','dice'],['#bTurns','turns'],['#bInvite','invite']]) $(b).classList.toggle('on',k===m);
 }
-function closePanel(){ mode=null; panel.classList.remove('open'); render(); for(const b of ['#bMap','#bDice','#bTurns','#bInvite']) $(b).classList.remove('on'); if(selected){selected=null;render();} }
+function closePanel(){ mode=null; selMap=null; panel.classList.remove('open'); render(); for(const b of ['#bMap','#bDice','#bTurns','#bInvite']) $(b).classList.remove('on'); if(selected){selected=null;render();} }
 $('#pclose').onclick=closePanel;
 function select(id){
   selected=id&&tokens.has(id)?id:null; render();
@@ -823,18 +927,36 @@ function select(id){
 }
 $('#bFit').onclick=fit;
 $('#eMap').onclick=()=>{emptyDismissed=true;showMap();render();};
-$('#eTok').onclick=()=>{emptyDismissed=true;$('#bAdd').click();};
+$('#eTok').onclick=e=>{emptyDismissed=true;render();$('#bAdd').onclick(e);};
 $('#bMap').onclick=()=>mode==='map'?closePanel():showMap();
 $('#bDice').onclick=()=>mode==='dice'?closePanel():showDice();
 $('#bTurns').onclick=()=>mode==='turns'?closePanel():showTurns();
 $('#bInvite').onclick=()=>mode==='invite'?closePanel():(roomCode?showInvite():showLobby());
-$('#bAdd').onclick=()=>{
-  const r=vp.getBoundingClientRect(); const b=toBoard(r.left+r.width/2,r.top+r.height/2);
-  let x=Math.round((b.x-game.offX)/game.cell-0.5), y=Math.round((b.y-game.offY)/game.cell-0.5);
+function centerCell(sz=1){ const r=vp.getBoundingClientRect(); const b=toBoard(r.left+r.width/2,r.top+r.height/2); return {x:Math.round((b.x-game.offX)/game.cell-sz/2), y:Math.round((b.y-game.offY)/game.cell-sz/2)}; }
+function addBlankToken(){
+  const {x,y}=centerCell();
   const n=[...tokens.values()].filter(t=>t.kind==='pc').length+1;
   const id=createToken({name:'Hero '+n,kind:'pc',color:COLORS[(tokens.size*3)%COLORS.length],size:1,shape:'circle',x,y,hp:10,maxHp:10,ac:10,init:'',conds:[],notes:'',img:null,createdBy:myId||null});
   select(id);
+}
+const cleanName=fn=>String(fn||'').replace(/\.[a-z0-9]{2,5}$/i,'').replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim().slice(0,24);
+const addMenu=$('#addMenu');
+function closeAddMenu(){ addMenu.classList.remove('open'); }
+$('#bAdd').onclick=e=>{
+  e.stopPropagation();
+  if(addMenu.classList.contains('open')) return closeAddMenu();
+  const r=$('#bAdd').getBoundingClientRect(); addMenu.style.left=Math.min(r.left,innerWidth-260)+'px'; addMenu.style.top=(r.bottom+8)+'px'; addMenu.classList.add('open');
 };
+document.addEventListener('pointerdown',e=>{ if(addMenu.classList.contains('open')&&!addMenu.contains(e.target)&&e.target.closest&&!e.target.closest('#bAdd')) closeAddMenu(); },true);
+$('#amBlank').onclick=()=>{ closeAddMenu(); addBlankToken(); };
+$('#amChar').onclick=()=>{ $('#amFile').click(); };
+$('#amFile').addEventListener('change',async()=>{
+  const f=$('#amFile').files[0]; $('#amFile').value=''; closeAddMenu(); if(!f) return;
+  const img=await upload(f,800); if(!img) return;
+  const {x,y}=centerCell();
+  const id=createToken({name:cleanName(f.name)||'Hero',kind:'pc',color:COLORS[(tokens.size*3)%COLORS.length],size:1,shape:'figure',x,y,hp:10,maxHp:10,ac:10,init:'',conds:[],notes:'',img,createdBy:myId||null});
+  select(id); toast('Character added. Drag it into place, or change its size in the panel.');
+});
 
 /* ---- token panel ---- */
 let tokUI=null;
@@ -856,7 +978,7 @@ function showToken(){
   const sizeIn=el('input',{class:'in',type:'number',min:'0.25',max:'20',step:'0.5',style:'width:84px;flex:none'});
   sizeIn.addEventListener('change',()=>{saveToken(id,{size:clamp(num(sizeIn.value,1),0.25,20)});fillToken();});
   const shapes=el('div',{class:'chips'}); const shapeBtns={};
-  for(const [s,l] of [['circle','● Round'],['square','■ Square']]){ shapeBtns[s]=el('button',{class:'chip',text:l,onclick:()=>{saveToken(id,{shape:s});fillToken();}}); shapes.append(shapeBtns[s]); }
+  for(const [s,l] of [['figure','🧍 Picture only'],['circle','● Round'],['square','■ Square']]){ shapeBtns[s]=el('button',{class:'chip',text:l,onclick:()=>{saveToken(id,{shape:s});fillToken();}}); shapes.append(shapeBtns[s]); }
 
   const hpIn=el('input',{class:'in',type:'number',style:'text-align:center'}), maxIn=el('input',{class:'in',type:'number',style:'text-align:center'});
   hpIn.addEventListener('change',()=>saveToken(id,{hp:num(hpIn.value)}));
@@ -873,9 +995,11 @@ function showToken(){
   let notesT; notes.addEventListener('input',()=>{clearTimeout(notesT);notesT=setTimeout(()=>saveToken(id,{notes:notes.value.slice(0,2000)}),500);});
 
   const file=el('input',{type:'file',accept:'image/*',style:'display:none'});
-  file.addEventListener('change',async()=>{const f=file.files[0];file.value='';if(!f)return;const aid=await upload(f);if(aid)saveToken(id,{img:aid});fillToken();});
-  const picBtn=el('button',{class:'big',text:'🖼 Upload picture',onclick:()=>file.click()});
-  const picRm=el('button',{class:'big',text:'Remove',onclick:()=>{saveToken(id,{img:null});fillToken();}});
+  file.addEventListener('change',async()=>{const f=file.files[0];file.value='';if(!f)return;const aid=await upload(f,800);if(aid)saveToken(id,{img:aid,shape:'figure'});fillToken();});
+  const picBtn=el('button',{class:'big',text:'🖼 Upload image',onclick:()=>file.click()});
+  const picRm=el('button',{class:'big',text:'Remove',onclick:()=>{const t=tokens.get(id);saveToken(id,{img:null,shape:t&&t.shape==='figure'?'circle':t.shape});fillToken();}});
+  const picPrev=el('div',{class:'pic'});
+  const shapeHint=el('p',{class:'hint',text:'“Picture only” shows your image as-is — best with a character on a transparent background (PNG).'});
 
   const dup=el('button',{class:'big',text:'⧉ Duplicate',onclick:()=>{const t=tokens.get(id);const m=/^(.*?)(\d+)$/.exec(t.name||'');const nm=m?m[1]+(+m[2]+1):(t.name||'Token')+' 2';const c={...t,name:nm,x:num(t.x)+num(t.size,1),init:'',createdBy:myId||null};const nid=createToken(c);select(nid);}});
   let armed=false;
@@ -883,20 +1007,20 @@ function showToken(){
 
   pbody.append(
     field('Name',name),
+    el('div',{class:'sec'},[el('label',{text:'Character image'}),el('div',{class:'row'},[picPrev,picBtn,picRm,file])]),
     field('Type',kinds),
     field('Color',sws),
     field('Size',el('div',{},[sizes,el('div',{class:'row',style:'margin-top:8px'},[el('span',{class:'hint',style:'margin:0',text:'Squares wide'}),sizeIn])])),
-    field('Shape',shapes),
+    field('Style',el('div',{},[shapes,shapeHint])),
     el('div',{class:'sec'},[el('label',{text:'Hit points'}),el('div',{class:'row'},[hpIn,el('span',{text:'/',style:'flex:none;color:var(--mute)'}),maxIn]),
       el('div',{class:'row',style:'margin-top:8px'},[el('button',{class:'big red',text:'− Damage',onclick:()=>adj(-1)}),amt,el('button',{class:'big green',text:'+ Heal',onclick:()=>adj(1)})])]),
     el('div',{class:'sec'},[el('div',{class:'row'},[el('div',{},[el('span',{class:'lab',text:'Armor class'}),acIn]),el('div',{},[el('span',{class:'lab',text:'Initiative'}),el('div',{class:'row'},[initIn,rollInit])])])]),
     field('Conditions',conds),
-    field('Picture',el('div',{class:'row'},[picBtn,picRm,file])),
     field('Notes',notes),
     el('div',{class:'row'},[dup,del])
   );
   if(ro) pbody.querySelectorAll('input,button,textarea').forEach(n=>n.disabled=true);
-  tokUI={id,name,kindBtns,swBtns,sizeBtns,sizeIn,shapeBtns,hpIn,maxIn,acIn,initIn,condBtns,notes,picRm};
+  tokUI={id,name,kindBtns,swBtns,sizeBtns,sizeIn,shapeBtns,hpIn,maxIn,acIn,initIn,condBtns,notes,picRm,picPrev,picBtn};
   fillToken();
 }
 function setVal(inp,v){ if(document.activeElement!==inp) inp.value=v; }
@@ -908,11 +1032,14 @@ function fillToken(){
   for(const c in u.swBtns) u.swBtns[c].classList.toggle('on',t.color===c);
   for(const s in u.sizeBtns) u.sizeBtns[s].classList.toggle('on',num(t.size,1)===+s);
   setVal(u.sizeIn,num(t.size,1));
-  for(const s in u.shapeBtns) u.shapeBtns[s].classList.toggle('on',(t.shape||'circle')===s);
+  for(const s in u.shapeBtns) u.shapeBtns[s].classList.toggle('on',((t.shape==='figure'&&!t.img)?'circle':(t.shape||'circle'))===s);
   setVal(u.hpIn,num(t.hp)); setVal(u.maxIn,num(t.maxHp)); setVal(u.acIn,num(t.ac,10)); setVal(u.initIn,t.init===''||t.init==null?'':num(t.init));
   const cs=Array.isArray(t.conds)?t.conds:[]; for(const c in u.condBtns) u.condBtns[c].classList.toggle('on',cs.includes(c));
   setVal(u.notes,typeof t.notes==='string'?t.notes:'');
   u.picRm.style.display=t.img?'':'none';
+  u.picBtn.textContent=t.img?'🖼 Change image':'🖼 Upload image';
+  u.picPrev.style.backgroundImage=okId(t.img)?`url("${imgUrl(t.img)}")`:'none';
+  u.shapeBtns.figure.disabled=!t.img; u.shapeBtns.figure.style.opacity=t.img?'':'.45';
 }
 
 async function shrink(f,maxDim){
@@ -921,7 +1048,7 @@ async function shrink(f,maxDim){
     const im=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url;});
     const sc=Math.min(1,maxDim/Math.max(im.naturalWidth,im.naturalHeight));
     const w=Math.max(1,Math.round(im.naturalWidth*sc)), h=Math.max(1,Math.round(im.naturalHeight*sc));
-    const png=f.type==='image/png'&&maxDim<=600;
+    const png=/^image\/(png|webp|gif)$/.test(f.type)&&maxDim<=800;
     if(sc===1&&f.size<6*1024*1024&&/^image\/(png|jpeg|webp)$/.test(f.type)) return {blob:f,w,h};
     const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(im,0,0,w,h);
     const blob=await new Promise(r=>c.toBlob(r,png?'image/png':'image/jpeg',0.86));
@@ -952,56 +1079,91 @@ function rangeRow(label,min,max,step,get,set){
   wrap._fill=()=>{const v=get();setVal(r,v);setVal(n,v);};
   return wrap;
 }
+function addMapPiece(data){
+  const list=[...maps.values()].filter(okMap);
+  let x=0,y=0;
+  if(list.length){ x=Math.ceil(Math.max(...list.map(m=>+m.x+ +m.w)))+1; y=Math.floor(Math.min(...list.map(m=>+m.y))); }
+  const z=list.length?Math.max(...list.map(m=>num(m.z)))+1:1;
+  const id=createMap({...data,x,y,z,locked:false});
+  selMap=id; fillMap(); setTimeout(fit,40); return id;
+}
 function showMap(){
-  select(null); openPanel('map','Map & Grid');
-  const ro=canWrite===false||!assets;
+  select(null); openPanel('map','Maps'); render();
   const file=el('input',{type:'file',accept:'image/*',style:'display:none'});
   file.addEventListener('change',async()=>{
     const f=file.files[0]; file.value=''; if(!f) return;
-    const id=await upload(f,4096); if(!id) return; const dims=[upload.last.w,upload.last.h];
-    // guess a grid size: assume ~ 1 square per 70px unless the map is huge
-    saveGame({map:id,mapW:dims[0],mapH:dims[1],preset:null}); fitted=false; setTimeout(fit,50); toast('Map uploaded. Use the sliders to line the grid up with the map.');
+    const id=await upload(f,4096); if(!id) return; const {w,h}=upload.last;
+    const cw=Math.max(2,Math.round(w/U*10)/10);
+    addMapPiece({kind:'image',img:id,name:cleanName(f.name)||'Uploaded map',w:cw,h:Math.round(cw*h/w*1000)/1000});
+    toast('Map added. Drag the gold corner until its squares line up with the grid.');
   });
-  const up=el('button',{class:'big gold',text:'⬆ Upload your own map image',style:'width:100%',onclick:()=>file.click()});
-  const rm=el('button',{class:'big',text:'Use a blank grid instead',style:'width:100%;margin-top:8px',onclick:()=>{saveGame({map:null,mapW:0,mapH:0,preset:null,cell:70,offX:0,offY:0});fitted=false;setTimeout(fit,50);}});
-  const gal=el('div',{class:'gal'}); const cards={};
-  for(const k in PRESETS){ cards[k]=el('button',{class:'card',onclick:()=>{ if(canWrite===false) return; const seed=PRESETS[k].random?Math.floor(Math.random()*1e9)+1:1; const pm=presetMap(k,seed); if(!pm) return; saveGame({preset:k,seed,map:null,mapW:0,mapH:0,cell:U,offX:0,offY:0,grid:true,gridLight:!!PRESETS[k].light,gridAlpha:PRESETS[k].light?0.3:0.4}); fitted=false; setTimeout(fit,50); }},[el('img',{src:presetThumb(k),alt:''}),el('span',{text:PRESETS[k].label})]); gal.append(cards[k]); }
-  const reroll=el('button',{class:'big',text:'🎲 Shuffle this map’s layout',style:'width:100%;margin-top:8px',onclick:()=>{ if(!game.preset) return; saveGame({seed:Math.floor(Math.random()*1e9)+1}); fitted=false; setTimeout(fit,50); }});
-  const upHint=el('p',{class:'hint',text:'Any JPG or PNG battle map works. Big images are shrunk automatically. Everyone at the table sees it.'});
+  const up=el('button',{class:'big gold',text:'⬆ Add a map from your device',style:'width:100%',onclick:()=>file.click()});
+  const gal=el('div',{class:'gal'});
+  for(const k in PRESETS) gal.append(el('button',{class:'card',onclick:()=>{ const seed=PRESETS[k].random?Math.floor(Math.random()*1e9)+1:1; const pm=presetMap(k,seed); if(!pm) return;
+    addMapPiece({kind:'preset',preset:k,seed,name:PRESETS[k].label,w:pm.cols*U/game.cell,h:pm.rows*U/game.cell}); }},[el('img',{src:presetThumb(k),alt:''}),el('span',{text:'+ '+PRESETS[k].label})]));
+  const selBox=el('div'), list=el('div');
   const showGrid=el('input',{type:'checkbox'}); showGrid.addEventListener('change',()=>saveGame({grid:showGrid.checked}));
-  const light=el('input',{type:'checkbox'}); light.addEventListener('change',()=>saveGame({gridLight:light.checked}));
   const snapC=el('input',{type:'checkbox'}); snapC.checked=snap; snapC.addEventListener('change',()=>{snap=snapC.checked;ls.set('snap',snap);});
+  const styles=el('div',{class:'chips'}); const styleBtns={};
+  for(const [k,l] of [['auto','Auto'],['dark','Dark lines'],['light','Light lines']]){ styleBtns[k]=el('button',{class:'chip',text:l,onclick:()=>{saveGame({gridStyle:k});fillMap();}}); styles.append(styleBtns[k]); }
   const live=(k)=>(v,local)=>{ if(local){game[k]=v;sanitizeGame();render();} else saveGame({[k]:v}); };
-  const rows=[
-    rangeRow('Square size (pixels)',10,300,1,()=>game.cell,live('cell')),
-    rangeRow('Shift grid left/right',0,300,1,()=>game.offX,live('offX')),
-    rangeRow('Shift grid up/down',0,300,1,()=>game.offY,live('offY')),
-    rangeRow('Grid darkness',0,1,0.05,()=>game.gridAlpha,live('gridAlpha')),
-  ];
-  const blank=[rangeRow('Blank board width (squares)',5,100,1,()=>game.cols,live('cols')),rangeRow('Blank board height (squares)',5,100,1,()=>game.rows,live('rows'))];
+  const alpha=rangeRow('Grid strength',0,1,0.05,()=>game.gridAlpha,live('gridAlpha'));
   pbody.append(
-    el('div',{class:'sec'},[el('label',{text:'Ready-made maps — tap one'}),gal,reroll]),
-    el('div',{class:'sec'},[el('label',{text:'Your own map'}),up,file,upHint,rm]),
-    el('label',{class:'lab',style:'margin-top:18px',text:'Grid settings'}),
+    el('div',{class:'sec'},[el('label',{text:'Add a map'}),up,file,el('p',{class:'hint',text:'Any JPG or PNG battle map. Big images are shrunk automatically.'})]),
+    el('div',{class:'sec'},[el('label',{text:'Or add a ready-made map'}),gal]),
+    selBox,
+    el('div',{class:'sec'},[el('label',{text:'Maps on the table'}),list,el('p',{class:'hint',text:'While this panel is open you can drag maps around and drag the gold corner to resize. Close it to get back to playing.'})]),
+    el('label',{class:'lab',style:'margin-top:18px',text:'Grid'}),
     el('div',{class:'sec'},[
       el('label',{class:'tog'},[el('span',{text:'Show grid'}),showGrid]),
-      el('label',{class:'tog'},[el('span',{text:'White grid lines (for dark maps)'}),light]),
-      el('label',{class:'tog'},[el('span',{text:'Snap tokens to squares (just you)'}),snapC]),
+      el('label',{class:'tog'},[el('span',{text:'Snap to squares (just you)'}),snapC]),
+      styles,
     ]),
-    ...rows, ...blank
+    alpha
   );
-  if(ro){ up.disabled=true; up.style.opacity=.5; }
-  if(canWrite===false){ rm.disabled=true; reroll.disabled=true; }
-  if(canWrite===false) pbody.querySelectorAll('input:not([type=checkbox]),input[type=checkbox]').forEach(n=>{if(n!==snapC)n.disabled=true;});
-  mapUI={rm,showGrid,light,rows,blank,cards,reroll}; fillMap();
+  mapUI={selBox,list,showGrid,styleBtns,alpha}; fillMap();
 }
 function fillMap(){
   if(mode!=='map'||!mapUI) return;
-  mapUI.rm.style.display=(game.map||game.preset)?'':'none';
-  for(const k in mapUI.cards) mapUI.cards[k].classList.toggle('on',!game.map&&game.preset===k);
-  mapUI.reroll.style.display=(!game.map&&game.preset&&PRESETS[game.preset].random)?'':'none';
-  mapUI.showGrid.checked=!!game.grid; mapUI.light.checked=!!game.gridLight;
-  mapUI.rows.forEach(r=>r._fill()); mapUI.blank.forEach(r=>{r._fill();r.style.display=(game.map||game.preset)?'none':'';});
+  const u=mapUI;
+  u.showGrid.checked=!!game.grid;
+  for(const k in u.styleBtns) u.styleBtns[k].classList.toggle('on',game.gridStyle===k);
+  u.alpha._fill();
+  // list
+  u.list.textContent='';
+  const arr=[...maps.entries()].filter(([,m])=>okMap(m)).sort((a,b)=>num(b[1].z)-num(a[1].z));
+  if(!arr.length) u.list.append(el('p',{class:'hint',text:'No maps yet — add one above.'}));
+  for(const [id,m] of arr) u.list.append(el('button',{class:'maprow'+(selMap===id?' on':''),onclick:()=>{ selMap=id; const c=game.cell; centerOn((+m.x+ +m.w/2)*c,(+m.y+ +m.h/2)*c); render(); fillMap(); }},
+    [el('img',{src:mapSrc(m),alt:''}),el('span',{text:(m.locked?'🔒 ':'')+String(m.name||'Map').slice(0,40)})]));
+  // selected map controls (don't rebuild while typing in it)
+  if(u.selBox.contains(document.activeElement)&&u.selBox.dataset.id===selMap) return;
+  u.selBox.textContent=''; u.selBox.dataset.id=selMap||'';
+  const m=selMap&&maps.get(selMap); if(!m) return;
+  const id=selMap, ratio=(+m.h)/(+m.w);
+  const name=el('input',{class:'in',maxlength:'40'}); name.value=String(m.name||'');
+  name.addEventListener('change',()=>{ saveMap(id,{name:name.value.trim().slice(0,40)||'Map'}); fillMap(); });
+  const wIn=el('input',{class:'in',type:'number',min:'1',max:'400',step:m.kind==='preset'?'1':'0.1',style:'text-align:center'}); wIn.value=Math.round(+m.w*100)/100;
+  const setW=w=>{ w=clamp(num(w,+m.w),1,400); saveMap(id,{w:Math.round(w*1000)/1000,h:Math.round(w*ratio*1000)/1000}); wIn.value=Math.round(w*100)/100; };
+  wIn.addEventListener('change',()=>setW(wIn.value));
+  const stepB=(d,t)=>el('button',{class:'chip',text:t,onclick:()=>setW(num(wIn.value)+d)});
+  const zs=[...maps.values()].map(x=>num(x.z));
+  let armed=false;
+  const del=el('button',{class:'big red',text:'🗑 Remove',onclick:()=>{ if(!armed){armed=true;del.textContent='Tap again';setTimeout(()=>{armed=false;del.textContent='🗑 Remove';},2500);return;} deleteMap(id); fillMap(); }});
+  const kids=[
+    el('label',{class:'lab',text:'Selected map'}),
+    el('div',{class:'sec'},[name]),
+    el('div',{class:'sec'},[el('span',{class:'lab',text:'Width in squares'}),el('div',{class:'row'},[stepB(m.kind==='preset'?-1:-0.1,'−'),wIn,stepB(m.kind==='preset'?1:0.1,'+')]),
+      m.kind==='image'?el('p',{class:'hint',text:'Adjust until the map’s own squares line up with the grid.'}):null]),
+  ];
+  if(m.kind==='preset'&&PRESETS[m.preset]&&PRESETS[m.preset].random) kids.push(el('button',{class:'big',style:'width:100%;margin-bottom:8px',text:'🎲 Shuffle layout',onclick:()=>saveMap(id,{seed:Math.floor(Math.random()*1e9)+1})}));
+  kids.push(el('div',{class:'row',style:'margin-bottom:8px'},[
+    el('button',{class:'big',text:'⬆ Front',onclick:()=>{saveMap(id,{z:Math.max(...zs)+1});fillMap();}}),
+    el('button',{class:'big',text:'⬇ Back',onclick:()=>{saveMap(id,{z:Math.min(...zs)-1});fillMap();}}),
+    el('button',{class:'big',text:m.locked?'🔓 Unlock':'🔒 Lock',onclick:()=>{saveMap(id,{locked:!m.locked});fillMap();}})]));
+  kids.push(el('div',{class:'row'},[
+    el('button',{class:'big',text:'⧉ Duplicate',onclick:()=>{ const c={...m}; const nid=createMap({...c,x:+m.x+ +m.w+1,z:Math.max(...zs)+1,locked:false}); selMap=nid; fillMap(); setTimeout(fit,40); }}),
+    del]));
+  u.selBox.className='selcard'; u.selBox.append(...kids);
 }
 
 /* ---- dice ---- */
